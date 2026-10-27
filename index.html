@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobtel Game - Wojna o Przyprawę</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 5px; background-color: #000; color: #ffaa00;
+            font-family: "Courier New", Courier, monospace; display: flex;
+            justify-content: center; touch-action: manipulation; overflow-x: hidden;
+        }
+        #game-container {
+            width: 100%; max-width: 400px; border: 4px solid #aa0000;
+            background-color: #222; padding: 10px; box-shadow: 0 0 15px #ff0000; margin-top: 10px; position: relative;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 20px; color: #ffaa00; text-align: center; }
+        #ui {
+            display: flex; flex-direction: column; gap: 8px;
+            background-color: #333; color: white; padding: 10px; margin-bottom: 10px;
+            font-weight: bold; font-size: 13px; border: 2px solid #aa0000;
+        }
+        .ui-top { display: flex; justify-content: space-between; width: 100%; }
+        .ui-buttons { display: flex; gap: 5px; width: 100%; flex-wrap: wrap; }
+        canvas { background-color: #C27040; border: 2px solid #aa0000; display: block; width: 100%; height: auto; cursor: crosshair; }
+        .btn {
+            color: white; padding: 8px 4px; font-family: inherit; font-weight: bold; font-size: 11px;
+            cursor: pointer; border-radius: 5px; flex-grow: 1; text-align: center; transition: 0.1s; border: 2px solid #fff;
+        }
+        .btn-harvest { background-color: #aa5500; border-color: #ffaa00; }
+        .btn-harvest:active { background-color: #ffaa00; color: black; }
+        .btn-tower { background-color: #2255aa; border-color: #55aaff; }
+        .btn-tower:active { background-color: #55aaff; color: black; }
+        .btn-upgrade { background-color: #5500aa; border-color: #aa55ff; }
+        .btn-upgrade:active { background-color: #aa55ff; color: black; }
+        .btn-factory { background-color: #006644; border-color: #00ffaa; }
+        .btn-factory:active { background-color: #00ffaa; color: black; }
+        .btn-android { background-color: #444; border-color: #00ffcc; color: #00ffcc; }
+        .btn-android:active { background-color: #00ffcc; color: black; }
+        
+        .btn-active { background-color: #ff0000 !important; animation: blink 1s infinite; border-color: #fff !important; }
+        @keyframes blink { 50% { opacity: 0.7; } }
+        #game-over {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); color: red; display: none;
+            flex-direction: column; justify-content: center; align-items: center;
+            font-size: 30px; font-weight: bold; text-shadow: 2px 2px #000; z-index: 10; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>MOBTEL GAME</h1>
+    <div id="ui">
+        <div class="ui-top">
+            <div>Kasa: <span id="credits" style="color: #00ff00;">2000</span></div>
+            <div>Baza HP: <span id="baseHpText" style="color: #ff4444;">1000</span></div>
+        </div>
+        <div class="ui-top" style="border-top: 1px dashed #555; padding-top: 5px;">
+            <div>Punkty: <span id="scoreText" style="color: #00ffff;">0</span></div>
+        </div>
+        <div class="ui-buttons">
+            <button class="btn btn-harvest" id="btnBuy">MASZYNA(300)</button>
+            <button class="btn btn-tower" id="btnTower">WIEŻA(500)</button>
+            <button class="btn btn-upgrade" id="btnUpgrade">ULEPSZ(400)</button>
+            <button class="btn btn-factory" id="btnFactory">FABRYKA(800)</button>
+            <button class="btn btn-android" id="btnAndroid">ANDROID(200)</button>
+        </div>
+    </div>
+    
+    <canvas id="gameCanvas" width="350" height="400"></canvas>
+    <div id="game-over">GAME OVER<br><span style="font-size:14px; color:#fff; margin-top: 10px;">Odśwież stronę, by zagrać ponownie</span></div>
+</div>
+
+<script>
+const bgTexture = new Image();
+bgTexture.src = '68840.jpg'; // Tło planszy[span_0](start_span)[span_0](end_span)
+
+const baseTexture = new Image();
+baseTexture.src = '68837.jpg'; // Baza na środku[span_1](start_span)[span_1](end_span)
+
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = new AudioContext();
+let musicTimer = null;
+
+function startAmigaMusic() {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    if(musicTimer) return;
+
+    const chordNotes = [
+        [130.81, 196.00, 261.63, 329.63], 
+        [110.00, 164.81, 220.00, 329.63], 
+        [98.00,  146.83, 196.00, 293.66], 
+        [116.54, 174.61, 233.08, 349.23]  
+    ];
+    
+    let step = 0;
+    musicTimer = setInterval(() => {
+        if(audioCtx.state === 'suspended') return;
+        let chord = chordNotes[Math.floor(step / 8) % chordNotes.length];
+        let note = chord[step % chord.length];
+
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(note, audioCtx.currentTime);
+        gain1.gain.setValueAtTime(0.015, audioCtx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        osc1.connect(gain1); gain1.connect(audioCtx.destination);
+        osc1.start(); osc1.stop(audioCtx.currentTime + 0.8);
+
+        if(step % 2 === 0) {
+            const oscBass = audioCtx.createOscillator();
+            const gainBass = audioCtx.createGain();
+            oscBass.type = 'triangle';
+            oscBass.frequency.setValueAtTime(chord[0] / 2, audioCtx.currentTime);
+            gainBass.gain.setValueAtTime(0.03, audioCtx.currentTime);
+            gainBass.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            oscBass.connect(gainBass); gainBass.connect(audioCtx.destination);
+            oscBass.start(); oscBass.stop(audioCtx.currentTime + 0.3);
+        }
+        step++;
+    }, 300);
+}
+
+function playTone(startFreq, endFreq, type, duration, vol=0.05) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+    if(endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+}
+
+function playNoise(duration, vol, filterFreq) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const bufferSize = audioCtx.sampleRate * duration; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+    const gain = audioCtx.createGain(); gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = filterFreq;
+    noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination); noise.start();
+}
+
+const sfx = {
+    buy: () => { startAmigaMusic(); playTone(200, 200, 'triangle', 0.1, 0.05); setTimeout(() => playTone(300, 300, 'triangle', 0.15, 0.05), 100); },
+    upgrade: () => { startAmigaMusic(); playTone(300, 400, 'square', 0.1, 0.05); setTimeout(() => playTone(500, 600, 'square', 0.2, 0.05), 100); },
+    deposit: () => { playTone(300, 300, 'sine', 0.1, 0.05); setTimeout(() => playTone(450, 450, 'sine', 0.15, 0.05), 100); },
+    worm: () => playNoise(2.0, 0.6, 150), 
+    laser1: () => playTone(400, 100, 'sawtooth', 0.3, 0.05),
+    laser2: () => { playTone(600, 150, 'sawtooth', 0.2, 0.06); setTimeout(() => playTone(600, 150, 'sawtooth', 0.2, 0.06), 50); },
+    bolter: () => playNoise(0.1, 0.2, 800), 
+    mechShoot: () => { playNoise(0.3, 0.3, 400); playTone(200, 50, 'square', 0.3, 0.1); },
+    explosion: () => playNoise(0.4, 0.4, 300),
+    androidSpawn: () => playTone(800, 1200, 'sine', 0.2, 0.05)
+};
+
+document.addEventListener("DOMContentLoaded", function() {
+    const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+    const btnBuy = document.getElementById('btnBuy'); 
+    const btnTower = document.getElementById('btnTower');
+    const btnUpgrade = document.getElementById('btnUpgrade');
+    const btnFactory = document.getElementById('btnFactory');
+    const btnAndroid = document.getElementById('btnAndroid');
+    
+    let credits = 2000; let frame = 0; let gameOver = false;
+    let score = 0; // Licznik punktów
+    let base = { x: 145, y: 170, w: 60, h: 60, hp: 1000, maxHp: 1000 };
+    
+    let harvesters = []; let spiceFields = []; let worms = []; let towers = []; 
+    let enemies = []; let projectiles = []; let androids = [];
+    let factory = null; 
+    
+    let placingTower = false; let upgradingTower = false; let placingFactory = false;
+
+    for(let i=0; i<6; i++) spawnSpice();
+
+    function spawnSpice() { spiceFields.push({ x: Math.random() * (canvas.width - 40) + 10, y: Math.random() * (canvas.height - 40) + 10, size: Math.random() * 15 + 25, amount: 500 }); }
+
+    function resetModes() {
+        placingTower = false; upgradingTower = false; placingFactory = false;
+        btnTower.classList.remove('btn-active'); btnTower.innerText = "WIEŻA(500)";
+        btnUpgrade.classList.remove('btn-active'); btnUpgrade.innerText = "ULEPSZ(400)";
+        btnFactory.classList.remove('btn-active'); btnFactory.innerText = "FABRYKA(800)";
+    }
+
+    btnBuy.addEventListener('click', (e) => {
+        e.preventDefault(); startAmigaMusic(); resetModes();
+        if(credits >= 300 && !gameOver) {
+            credits -= 300;
+            score += 50; // Punkty za zakup maszyny
+            harvesters.push({ x: base.x + 20, y: base.y + 20, targetX: base.x + 20, targetY: base.y + 20, state: 'idle', cargo: 0, speed: 1.2, angle: 0, hp: 100 });
+            document.getElementById('credits').innerText = credits; sfx.buy();
+        }
+    });
+
+    btnTower.addEventListener('click', (e) => {
+        e.preventDefault(); startAmigaMusic();
+        if(placingTower) { resetModes(); return; } resetModes();
+        if(credits >= 500 && !gameOver) { placingTower = true; btnTower.classList.add('btn-active'); btnTower.innerText = "MIEJSCE?"; }
+    });
+
+    btnUpgrade.addEventListener('click', (e) => {
+        e.preventDefault(); startAmigaMusic();
+        if(upgradingTower) { resetModes(); return; } resetModes();
+        if(credits >= 400 && !gameOver) { upgradingTower = true; btnUpgrade.classList.add('btn-active'); btnUpgrade.innerText = "WYBIERZ"; }
+    });
+
+    btnFactory.addEventListener('click', (e) => {
+        e.preventDefault(); startAmigaMusic();
+        if(factory) { alert("Możesz mieć tylko jedną Fabrykę Androidów!"); return; }
+        if(placingFactory) { resetModes(); return; } resetModes();
+        if(credits >= 800 && !gameOver) { placingFactory = true; btnFactory.classList.add('btn-active'); btnFactory.innerText = "MIEJSCE?"; }
+    });
+
+    btnAndroid.addEventListener('click', (e) => {
+        e.preventDefault(); startAmigaMusic(); resetModes();
+        if(!factory) { alert("Zbuduj najpierw Fabrykę!"); return; }
+        if(credits >= 200 && !gameOver) {
+            credits -= 200;
+            score += 30; // Punkty za rekrutację androida
+            document.getElementById('credits').innerText = credits;
+            androids.push({ x: factory.x, y: factory.y + 20, hp: 100, maxHp: 100, speed: 1.5, angle: 0, cooldown: 0, id: Math.random() });
+            sfx.androidSpawn();
+        }
+    });
+
+    [btnBuy, btnTower, btnUpgrade, btnFactory, btnAndroid].forEach(btn => {
+        btn.addEventListener('touchstart', (e) => { e.target.click(); e.preventDefault(); }, {passive: false});
+    });
+
+    canvas.addEventListener('mousedown', (e) => { startAmigaMusic(); handleCanvasClick(e); });
+    canvas.addEventListener('touchstart', (e) => { startAmigaMusic(); handleCanvasClick(e); }, {passive: false});
+
+    function handleCanvasClick(e) {
+        if(gameOver) return;
+        e.preventDefault();
+        let clientX = e.clientX; let clientY = e.clientY;
+        if(e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+        const rect = canvas.getBoundingClientRect(); const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height;
+        const x = (clientX - rect.left) * scaleX; const y = (clientY - rect.top) * scaleY;
+
+        if(placingTower && credits >= 500) {
+            credits -= 500; document.getElementById('credits').innerText = credits;
+            score += 80; // Punkty za postawienie wieży
+            towers.push({ x: x, y: y, range: 100, hp: 200, maxHp: 200, cooldown: 0, level: 1, angle: 0 });
+            resetModes(); sfx.buy();
+        } 
+        else if (upgradingTower) {
+            let clickedTower = towers.find(t => Math.hypot(t.x - x, t.y - y) < 25);
+            if(clickedTower && clickedTower.level === 1 && credits >= 400) {
+                credits -= 400; document.getElementById('credits').innerText = credits;
+                score += 150; // Dużo punktów za ulepszenie do Lvl 2
+                clickedTower.level = 2; clickedTower.range = 140; clickedTower.maxHp = 400; clickedTower.hp = 400;
+                resetModes(); sfx.upgrade();
+            }
+        }
+        else if (placingFactory && credits >= 800) {
+            credits -= 800; document.getElementById('credits').innerText = credits;
+            score += 300; // Ogromna premia za budowę Fabryki
+            factory = { x: x, y: y, hp: 500, maxHp: 500 };
+            resetModes(); sfx.buy();
+        }
+    }
+
+    function getDistance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+
+    function gameLoop() {
+        if(gameOver) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height); frame++;
+
+        // Naliczanie punktów za czas gry (co sekundę przy 60 klatkach = +1 punkt)
+        if(frame % 60 === 0) {
+            score += 1;
+        }
+        document.getElementById('scoreText').innerText = score;
+
+        if (bgTexture.complete && bgTexture.naturalWidth !== 0) {
+            ctx.drawImage(bgTexture, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#C27040'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        if(frame % 300 === 0 && spiceFields.length < 8) spawnSpice();
+
+        for (let index = spiceFields.length - 1; index >= 0; index--) {
+            let spice = spiceFields[index];
+            ctx.fillStyle = '#8B3000'; ctx.beginPath();
+            ctx.arc(spice.x, spice.y, spice.size*0.6, 0, Math.PI*2);
+            ctx.arc(spice.x + spice.size*0.4, spice.y + spice.size*0.3, spice.size*0.5, 0, Math.PI*2); ctx.fill();
+            if(spice.amount <= 0) spiceFields.splice(index, 1);
+        }
+
+        if (factory) {
+            ctx.fillStyle = '#334433'; ctx.fillRect(factory.x - 20, factory.y - 15, 40, 30);
+            ctx.fillStyle = '#223322'; ctx.fillRect(factory.x - 15, factory.y - 10, 30, 20);
+            ctx.fillStyle = (frame % 20 < 10) ? '#00ffaa' : '#00aa66'; ctx.fillRect(factory.x - 10, factory.y - 2, 20, 4); 
+            ctx.fillStyle = '#444'; ctx.fillRect(factory.x + 10, factory.y - 25, 6, 10); 
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(factory.x - 15, factory.y - 22, 30, 4);
+            ctx.fillStyle = '#00ff00'; ctx.fillRect(factory.x - 15, factory.y - 22, (factory.hp/factory.maxHp)*30, 4);
+            if(factory.hp <= 0) { sfx.explosion(); factory = null; }
+        }
+
+        for (let i = androids.length - 1; i >= 0; i--) {
+            let a = androids[i];
+            if(a.cooldown > 0) a.cooldown--;
+            let target = null; let minDist = Infinity;
+            enemies.forEach(e => { let d = getDistance(a.x, a.y, e.x, e.y); if(d < minDist) { minDist = d; target = e; } });
+            worms.forEach(w => { if(w.timer > 0) { let d = getDistance(a.x, a.y, w.x, w.y); if(d < minDist) { minDist = d; target = w; } } });
+
+            if (target && minDist < 150) {
+                let dx = target.x - a.x; let dy = target.y - a.y; a.angle = Math.atan2(dy, dx);
+                if (minDist > 60) {
+                    a.x += Math.cos(a.angle) * a.speed; a.y += Math.sin(a.angle) * a.speed;
+                } else {
+                    if (a.cooldown <= 0) {
+                        let bx = a.x + Math.cos(a.angle) * 12 - Math.sin(a.angle) * 3;
+                        let by = a.y + Math.sin(a.angle) * 12 + Math.cos(a.angle) * 3;
+                        projectiles.push({ x: bx, y: by, tx: target.x, ty: target.y, speed: 8, isEnemy: false, dmg: 10, color: '#00ffcc' });
+                        a.cooldown = 20; sfx.laser1();
+                    }
+                }
+            } else if (factory) {
+                let px = factory.x + Math.cos(frame * 0.02 + a.id * 10) * 40; let py = factory.y + Math.sin(frame * 0.02 + a.id * 10) * 40;
+                let dx = px - a.x; let dy = py - a.y;
+                if (Math.hypot(dx, dy) > 2) { a.angle = Math.atan2(dy, dx); a.x += Math.cos(a.angle) * (a.speed * 0.6); a.y += Math.sin(a.angle) * (a.speed * 0.6); }
+            }
+
+            ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle);
+            ctx.fillStyle = '#aaa'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2); ctx.fill(); 
+            ctx.fillStyle = '#00ffcc'; ctx.fillRect(2, -2, 3, 4); 
+            ctx.fillStyle = '#333'; ctx.fillRect(4, 2, 8, 2); 
+            ctx.restore();
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(a.x - 5, a.y - 10, 10, 2);
+            ctx.fillStyle = '#00ff00'; ctx.fillRect(a.x - 5, a.y - 10, (a.hp/a.maxHp)*10, 2);
+            if(a.hp <= 0) { sfx.explosion(); androids.splice(i, 1); }
+        }
+
+        for (let i = towers.length - 1; i >= 0; i--) {
+            let t = towers[i];
+            if(t.cooldown > 0) t.cooldown--;
+            let target = null;
+            let targetWorm = worms.find(w => getDistance(w.x, w.y, t.x, t.y) <= t.range && w.timer > 0);
+            if(targetWorm) target = { x: targetWorm.x, y: targetWorm.y, isWorm: true, ref: targetWorm };
+            else {
+                let targetEnemy = enemies.find(e => getDistance(e.x, e.y, t.x, t.y) <= t.range);
+                if(targetEnemy) target = { x: targetEnemy.x, y: targetEnemy.y, isWorm: false, ref: targetEnemy };
+            }
+
+            if(target) {
+                t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+                if(t.cooldown <= 0) {
+                    if(target.isWorm) {
+                        target.ref.timer = -10; 
+                        ctx.save(); ctx.strokeStyle = t.level === 2 ? '#ff0000' : '#00ffff'; ctx.lineWidth = t.level === 2 ? 6 : 4;
+                        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(target.x, target.y); ctx.stroke(); ctx.restore();
+                        t.level === 2 ? sfx.laser2() : sfx.laser1(); t.cooldown = t.level === 2 ? 15 : 30;
+                    } else {
+                        let pSpeed = 8; let pDmg = t.level === 2 ? 25 : 30; 
+                        if(t.level === 1) {
+                            let bx = t.x + Math.cos(t.angle) * 19; let by = t.y + Math.sin(t.angle) * 19;
+                            projectiles.push({ x: bx, y: by, tx: target.x, ty: target.y, speed: pSpeed, isEnemy: false, dmg: pDmg, color: '#00ffff' }); sfx.laser1();
+                        } else {
+                            let bx1 = t.x + Math.cos(t.angle) * 20 - Math.sin(t.angle) * 5.5; let by1 = t.y + Math.sin(t.angle) * 20 + Math.cos(t.angle) * 5.5;
+                            let bx2 = t.x + Math.cos(t.angle) * 20 - Math.sin(t.angle) * -5.5; let by2 = t.y + Math.sin(t.angle) * 20 + Math.cos(t.angle) * -5.5;
+                            projectiles.push({ x: bx1, y: by1, tx: target.x, ty: target.y, speed: pSpeed, isEnemy: false, dmg: pDmg, color: '#ff0000' });
+                            projectiles.push({ x: bx2, y: by2, tx: target.x, ty: target.y, speed: pSpeed, isEnemy: false, dmg: pDmg, color: '#ff0000' });
+                            sfx.laser2();
+                        }
+                        t.cooldown = t.level === 2 ? 20 : 40;
+                    }
+                }
+            }
+
+            ctx.strokeStyle = upgradingTower ? 'rgba(170, 0, 255, 0.2)' : 'rgba(0, 170, 255, 0.2)'; 
+            ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, t.range, 0, Math.PI*2); ctx.stroke(); ctx.lineWidth = 1;
+            
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            if (baseTexture.complete && baseTexture.naturalWidth !== 0) {
+                ctx.save(); ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.closePath(); ctx.clip();
+                ctx.drawImage(baseTexture, -16, -16, 32, 32); ctx.restore();
+            } else { ctx.fillStyle = '#444'; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill(); }
+            
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.stroke();
+            ctx.rotate(t.angle);
+            let grad = ctx.createLinearGradient(-10, -10, 10, 10);
+            if(t.level === 1) {
+                ctx.fillStyle = '#444'; ctx.fillRect(0, -3, 20, 6); ctx.fillStyle = '#777'; ctx.fillRect(0, -2, 19, 2); 
+                grad.addColorStop(0, '#4477cc'); grad.addColorStop(1, '#112255');
+                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#00ffff'; ctx.beginPath(); ctx.arc(3, 0, 3, 0, Math.PI*2); ctx.fill();
+            } else {
+                ctx.fillStyle = '#333'; ctx.fillRect(0, -8, 22, 5); ctx.fillRect(0, 3, 22, 5); 
+                ctx.fillStyle = '#666'; ctx.fillRect(0, -7, 21, 2); ctx.fillRect(0, 4, 21, 2); 
+                grad.addColorStop(0, '#cc4444'); grad.addColorStop(1, '#551111');
+                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#222'; ctx.fillRect(-4, -4, 8, 8); ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(3, 0, 3, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+            
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(t.x - 10, t.y - 22, 20, 3);
+            ctx.fillStyle = '#00ff00'; ctx.fillRect(t.x - 10, t.y - 22, (t.hp/t.maxHp)*20, 3);
+
+            if(t.hp <= 0) { sfx.explosion(); towers.splice(i, 1); }
+        }
+
+        if (baseTexture.complete && baseTexture.naturalWidth !== 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(base.x + base.w/2, base.y + base.h/2, (base.w + 50)/2, 0, Math.PI*2);
+            ctx.closePath();
+            ctx.clip(); 
+            ctx.drawImage(baseTexture, base.x - 30, base.y - 30, base.w + 60, base.h + 60);
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(base.x + base.w/2, base.y + base.h/2, (base.w + 50)/2, 0, Math.PI*2);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#555'; ctx.fillRect(base.x - 8, base.y - 8, base.w + 16, base.h + 16); 
+            ctx.fillStyle = '#777'; ctx.fillRect(base.x, base.y, base.w, base.h); 
+            ctx.fillStyle = '#aa0000'; ctx.fillRect(base.x, base.y + 10, base.w, 12); 
+            ctx.fillStyle = '#444'; ctx.fillRect(base.x + 40, base.y - 15, 12, 25);
+            ctx.fillStyle = '#999'; ctx.beginPath(); ctx.arc(base.x + 15, base.y + 42, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(base.x + 45, base.y + 42, 12, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#ff0000'; ctx.fillRect(base.x - 10, base.y - 15, base.w + 20, 5);
+        ctx.fillStyle = '#00ff00'; ctx.fillRect(base.x - 10, base.y - 15, (base.hp/base.maxHp)*(base.w + 20), 5);
+
+        for (let i = harvesters.length - 1; i >= 0; i--) {
+            let h = harvesters[i];
+            if (h.state === 'idle' && spiceFields.length > 0) {
+                let target = spiceFields[Math.floor(Math.random() * spiceFields.length)];
+                h.targetX = target.x; h.targetY = target.y; h.state = 'moving_to_spice';
+            }
+            let dx = h.targetX - h.x; let dy = h.targetY - h.y; let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > h.speed) {
+                h.angle = Math.atan2(dy, dx); h.x += (dx / dist) * h.speed; h.y += (dy / dist) * h.speed;
+            } else {
+                if (h.state === 'moving_to_spice') { h.state = 'mining'; } 
+                else if (h.state === 'returning') { credits += h.cargo; h.cargo = 0; h.state = 'idle'; document.getElementById('credits').innerText = credits; sfx.deposit(); }
+            }
+
+            if (h.state === 'mining') {
+                h.cargo += 2;
+                let currentField = spiceFields.find(f => Math.abs(f.x - h.x) < 35 && Math.abs(f.y - h.y) < 35);
+                if (currentField) currentField.amount -= 2;
+                if (h.cargo >= 100 || !currentField) { h.state = 'returning'; h.targetX = base.x + base.w/2; h.targetY = base.y + base.h/2; }
+            }
+
+            ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.angle);
+            ctx.fillStyle = '#111'; ctx.fillRect(-12, -14, 24, 6); ctx.fillRect(-12, 8, 24, 6);
+            ctx.fillStyle = '#8B0000'; ctx.fillRect(-10, -10, 20, 20); 
+            ctx.fillStyle = '#00aaff'; ctx.fillRect(-2, -5, 8, 10);
+            ctx.fillStyle = '#555'; ctx.fillRect(10, -12, 6, 24); ctx.restore();
+            
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(h.x - 10, h.y - 18, 20, 3);
+            ctx.fillStyle = '#00ff00'; ctx.fillRect(h.x - 10, h.y - 18, (h.hp/100)*20, 3);
+            if(h.hp <= 0) { sfx.explosion(); harvesters.splice(i, 1); }
+        }
+
+        if (frame > 900 && Math.random() < 0.0015 && harvesters.length > 0) {
+            let targetH = harvesters[Math.floor(Math.random() * harvesters.length)];
+            if (targetH.state !== 'returning' || getDistance(targetH.x, targetH.y, base.x+30, base.y+30) > 80) { worms.push({ x: targetH.x, y: targetH.y, timer: 70 }); sfx.worm(); }
+        }
+
+        for (let wIndex = worms.length - 1; wIndex >= 0; wIndex--) {
+            let w = worms[wIndex]; w.timer--;
+            if(w.timer > 35) {
+                ctx.strokeStyle = '#5E3113'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(w.x, w.y, (70 - w.timer), 0, Math.PI*2); ctx.stroke(); ctx.lineWidth = 1;
+            } else if (w.timer > 0) {
+                ctx.fillStyle = '#1a0505'; ctx.beginPath(); ctx.ellipse(w.x, w.y, 30, 15, 0, 0, Math.PI*2); ctx.fill();
+                let progress = Math.sin(((35 - w.timer) / 35) * Math.PI); let wormHeight = progress * 40; 
+                for(let k=0; k<4; k++) {
+                    let segY = w.y - (wormHeight * (k/3)) - 5; let segSize = 20 - (k*3);
+                    ctx.fillStyle = '#8B3A3A'; ctx.beginPath(); ctx.ellipse(w.x, segY, segSize, segSize*0.6, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#3a1010'; ctx.stroke();
+                }
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(w.x, w.y - wormHeight - 5, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.fillRect(w.x - 5, w.y - wormHeight - 5, 2, 4); ctx.fillRect(w.x + 3, w.y - wormHeight - 5, 2, 4);
+            }
+            if(w.timer === 35) {
+                harvesters = harvesters.filter(h => getDistance(h.x, h.y, w.x, w.y) > 40);
+                androids = androids.filter(a => getDistance(a.x, a.y, w.x, w.y) > 40);
+            }
+            if(w.timer <= 0) worms.splice(wIndex, 1);
+        }
+
+        if (frame >= 2000 && frame % 300 === 0) {
+            let startX = Math.random() > 0.5 ? -20 : canvas.width + 20; let startY = Math.random() * canvas.height;
+            enemies.push({ type: 'marine', x: startX, y: startY, hp: 120, maxHp: 120, speed: 0.6, cooldown: 0, angle: 0 });
+        }
+        if (frame >= 5000 && frame % 600 === 0) {
+            let startX = Math.random() > 0.5 ? -20 : canvas.width + 20; let startY = Math.random() * canvas.height;
+            enemies.push({ type: 'mech', x: startX, y: startY, hp: 240, maxHp: 240, speed: 0.35, cooldown: 0, angle: 0 });
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            let target = { x: base.x + 30, y: base.y + 30, type: 'base', ref: base };
+            let minDist = getDistance(e.x, e.y, target.x, target.y);
+            
+            towers.forEach(t => { let d = getDistance(e.x, e.y, t.x, t.y); if(d < minDist) { minDist = d; target = {x: t.x, y: t.y, type: 'tower', ref: t}; }});
+            harvesters.forEach(h => { let d = getDistance(e.x, e.y, h.x, h.y); if(d < minDist) { minDist = d; target = {x: h.x, y: h.y, type: 'harvester', ref: h}; }});
+            if(factory) { let d = getDistance(e.x, e.y, factory.x, factory.y); if(d < minDist) { minDist = d; target = {x: factory.x, y: factory.y, type: 'factory', ref: factory}; } }
+            androids.forEach(a => { let d = getDistance(e.x, e.y, a.x, a.y); if(d < minDist) { minDist = d; target = {x: a.x, y: a.y, type: 'android', ref: a}; }});
+
+            let dx = target.x - e.x; let dy = target.y - e.y; e.angle = Math.atan2(dy, dx); 
+
+            if (minDist > (e.type === 'mech' ? 110 : 90)) {
+                e.x += (dx / minDist) * e.speed; e.y += (dy / minDist) * e.speed;
+            } else {
+                if(e.cooldown <= 0) {
+                    if (e.type === 'marine') {
+                        let bx = e.x + Math.cos(e.angle) * 20 - Math.sin(e.angle) * 6.5; let by = e.y + Math.sin(e.angle) * 20 + Math.cos(e.angle) * 6.5;
+                        projectiles.push({ x: bx, y: by, tx: target.x, ty: target.y, speed: 6, isEnemy: true, dmg: 15, color: '#ff8800' });
+                        e.cooldown = 50; sfx.bolter();
+                    } else if (e.type === 'mech') {
+                        let offsetX = Math.cos(e.angle + Math.PI/2) * 12; let offsetY = Math.sin(e.angle + Math.PI/2) * 12;
+                        projectiles.push({ x: e.x + offsetX, y: e.y + offsetY, tx: target.x, ty: target.y, speed: 7, isEnemy: true, dmg: 15, color: '#ff00ff' });
+                        projectiles.push({ x: e.x - offsetX, y: e.y - offsetY, tx: target.x, ty: target.y, speed: 7, isEnemy: true, dmg: 15, color: '#ff00ff' });
+                        e.cooldown = 70; sfx.mechShoot();
+                    }
+                }
+            }
+            if(e.cooldown > 0) e.cooldown--;
+
+            ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.angle);
+            if (e.type === 'marine') {
+                ctx.fillStyle = '#113366'; ctx.fillRect(-10, -10, 8, 20); ctx.fillStyle = '#1a3b80'; ctx.fillRect(-4, -8, 10, 16);
+                ctx.fillStyle = '#1a3b80'; ctx.beginPath(); ctx.arc(0, -9, 7, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 9, 7, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#eebb00'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -9, 6, Math.PI/2, Math.PI*1.5); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 9, 6, Math.PI/2, Math.PI*1.5, true); ctx.stroke(); ctx.lineWidth = 1;
+                ctx.fillStyle = '#1a3b80'; ctx.beginPath(); ctx.arc(4, 0, 5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ff0000'; ctx.fillRect(6, -2, 2, 4); ctx.fillStyle = '#333'; ctx.fillRect(6, 4, 14, 5); ctx.fillStyle = '#555'; ctx.fillRect(7, 3, 10, 2);
+            } else if (e.type === 'mech') {
+                ctx.fillStyle = (frame % 10 < 5) ? '#ff5500' : '#ffff00'; ctx.beginPath(); ctx.arc(-16, 0, 6 + Math.random()*3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#222'; ctx.fillRect(-10, -16, 12, 32); ctx.fillStyle = '#3a4a3a'; ctx.beginPath(); 
+                ctx.moveTo(12, 0); ctx.lineTo(0, 14); ctx.lineTo(-12, 10); ctx.lineTo(-12, -10); ctx.lineTo(0, -14); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = (frame % 30 < 15) ? '#ff0000' : '#aa0000'; ctx.beginPath(); ctx.arc(4, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#111'; ctx.fillRect(0, -22, 22, 8); ctx.fillRect(0, 14, 22, 8); 
+                ctx.fillStyle = '#444'; ctx.fillRect(-4, -24, 10, 12); ctx.fillRect(-4, 12, 10, 12); 
+                ctx.fillStyle = '#ff00ff'; ctx.fillRect(18, -21, 4, 6); ctx.fillRect(18, 15, 4, 6); 
+            }
+            ctx.restore();
+            
+            let hpBarWidth = e.type === 'mech' ? 30 : 20;
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(e.x - hpBarWidth/2, e.y - 22, hpBarWidth, 3);
+            ctx.fillStyle = '#00ff00'; ctx.fillRect(e.x - hpBarWidth/2, e.y - 22, (e.hp/e.maxHp)*hpBarWidth, 3);
+
+            if(e.hp <= 0) { sfx.explosion(); credits += (e.type === 'mech' ? 150 : 50); document.getElementById('credits').innerText = credits; enemies.splice(i, 1); }
+        }
+
+        // 10. System Pocisków
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            let p = projectiles[i];
+            let dx = p.tx - p.x; let dy = p.ty - p.y; let dist = Math.hypot(dx, dy);
+            
+            if (dist < p.speed) {
+                if(p.isEnemy) {
+                    if(getDistance(p.tx, p.ty, base.x+30, base.y+30) < 40) { base.hp -= p.dmg; document.getElementById('baseHpText').innerText = base.hp; }
+                    towers.forEach(t => { if(getDistance(p.tx, p.ty, t.x, t.y) < 20) t.hp -= p.dmg; });
+                    harvesters.forEach(h => { if(getDistance(p.tx, p.ty, h.x, h.y) < 20) h.hp -= p.dmg; });
+                    if(factory && getDistance(p.tx, p.ty, factory.x, factory.y) < 20) factory.hp -= p.dmg;
+                    androids.forEach(a => { if(getDistance(p.tx, p.ty, a.x, a.y) < 15) a.hp -= p.dmg; });
+                } else {
+                    enemies.forEach(e => { if(getDistance(p.tx, p.ty, e.x, e.y) < (e.type === 'mech' ? 25 : 20)) e.hp -= p.dmg; });
+                }
+                projectiles.splice(i, 1);
+            } else {
+                p.x += (dx/dist)*p.speed; p.y += (dy/dist)*p.speed;
+                ctx.fillStyle = p.color || '#00ffff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.isEnemy ? 4 : 3, 0, Math.PI*2); ctx.fill();
+            }
+        }
+
+        if(base.hp <= 0) {
+            gameOver = true; document.getElementById('game-over').style.display = 'flex'; sfx.explosion();
+        }
+        requestAnimationFrame(gameLoop);
+    }
+    gameLoop();
+});
+</script>
+</body>
+</html>
