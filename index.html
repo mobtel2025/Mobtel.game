@@ -84,7 +84,7 @@
     
     <div id="game-over">
         KONIEC GRY<br>
-        <span style="font-size: 13px; color: #fff; margin-top: 4px;">Twój wynik: <b id="finalScore" style="color: #00ffff;">0</b> pkt</span>
+        <div style="font-size: 13px; color: #fff; margin-top: 4px;">Twój wynik: <b id="finalScore" style="color: #00ffff;">0</b> pkt</div>
         
         <div id="score-form">
             <input type="text" id="player-nick" maxlength="10" placeholder="TWÓJ NICK">
@@ -100,10 +100,10 @@
 
 <script>
 const bgTexture = new Image();
-bgTexture.src = '68840.jpg';[span_0](start_span)[span_0](end_span)
+bgTexture.src = '68840.jpg';
 
 const baseTexture = new Image();
-baseTexture.src = '68837.jpg';[span_1](start_span)[span_1](end_span)
+baseTexture.src = '68837.jpg';
 
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx = new AudioContext();
@@ -207,7 +207,7 @@ function displayLeaderboard() {
         return;
     }
     scores.forEach((item, index) => {
-        listEl.innerHTML += `<div class="leaderboard-item"><span>${index+1}. ${item.name}</span> <span>${item.score} pkt</span></div>`;
+        listEl.innerHTML += `<div class="leaderboard-item"><div>${index+1}. ${item.name}</div> <div>${item.score} pkt</div></div>`;
     });
 }
 
