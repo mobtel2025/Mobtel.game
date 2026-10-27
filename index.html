@@ -65,11 +65,11 @@
     <h1>MOBTEL GAME</h1>
     <div id="ui">
         <div class="ui-top">
-            <div>Kasa: <span id="credits" style="color: #00ff00;">2000</span></div>
-            <div>Baza HP: <span id="baseHpText" style="color: #ff4444;">1000</span></div>
+            <div>Kasa: <b id="credits" style="color: #00ff00;">2000</b></div>
+            <div>Baza HP: <b id="baseHpText" style="color: #ff4444;">1000</b></div>
         </div>
         <div class="ui-top" style="border-top: 1px dashed #555; padding-top: 4px;">
-            <div>Punkty: <span id="scoreText" style="color: #00ffff;">0</span></div>
+            <div>Punkty: <b id="scoreText" style="color: #00ffff;">0</b></div>
         </div>
         <div class="ui-buttons">
             <button class="btn btn-harvest" id="btnBuy">MASZYNA(300)</button>
@@ -84,7 +84,7 @@
     
     <div id="game-over">
         KONIEC GRY<br>
-        <span style="font-size: 13px; color: #fff; margin-top: 4px;">Twój wynik: <span id="finalScore" style="color: #00ffff;">0</span> pkt</span>
+        <span style="font-size: 13px; color: #fff; margin-top: 4px;">Twój wynik: <b id="finalScore" style="color: #00ffff;">0</b> pkt</span>
         
         <div id="score-form">
             <input type="text" id="player-nick" maxlength="10" placeholder="TWÓJ NICK">
@@ -100,10 +100,10 @@
 
 <script>
 const bgTexture = new Image();
-bgTexture.src = '68840.jpg';
+bgTexture.src = '68840.jpg';[span_0](start_span)[span_0](end_span)
 
 const baseTexture = new Image();
-baseTexture.src = '68837.jpg';[span_0](start_span)[span_0](end_span)
+baseTexture.src = '68837.jpg';[span_1](start_span)[span_1](end_span)
 
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx = new AudioContext();
